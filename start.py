@@ -1,18 +1,29 @@
-import asyncio
-import random
-from SpiderAvito import SpiderAvito
+
+from SpiderAvito import  SpiderAvitoDispatcherList
 from Settings import DB_SETTINGS, USER_AGENTS
 import time
+
+URL_KVARTIRY_LIST='https://www.avito.ru/krasnodar/kvartiry/prodam'
+
+
+def synchronously():
+    x = SpiderAvitoDispatcherList(url=URL_KVARTIRY_LIST, user_agents=USER_AGENTS, db_setting=DB_SETTINGS, count_page=3)
+    start_time = time.time()
+    result = x.start()
+    print(result)
+    print(time.time() - start_time)
+
+
+def asynchronously():
+    x = SpiderAvitoDispatcherList(url=URL_KVARTIRY_LIST, user_agents=USER_AGENTS, db_setting=DB_SETTINGS, count_page=3)
+    start_time = time.time()
+    result = x.start_aio()
+    print(result)
+    print(time.time() - start_time)
+
+
 if __name__ == '__main__':
-    x = SpiderAvito('https://ya.ru/', random.choice(USER_AGENTS))
-    y = SpiderAvito('https://www.avito.ru/krasnodar/kvartiry/prodam', random.choice(USER_AGENTS))
-    start__time = time.time()
-    loop = asyncio.get_event_loop()
-    tasks = [loop.create_task(x.AIO_getHtml()), loop.create_task(y.AIO_getHtml())]
-    wait_tasks = asyncio.wait(tasks)
-    loop.run_until_complete(wait_tasks)
-    loop.close()
-    print(time.time()-start__time)
-    #x.getHtml()
-    #y.getHtml()
-    #print(time.time() - start__time)
+    #synchronously()
+    #time.sleep(10)
+    asynchronously()
+
