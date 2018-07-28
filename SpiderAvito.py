@@ -6,14 +6,14 @@ import certifi
 import re
 from bs4 import BeautifulSoup
 import traceback
-import asyncpg
-import postgresql
 import itertools
 import time
 from datetime import datetime, timedelta
 import json
 import sys
-
+import psycopg2
+import asyncpg
+#import postgresql
 
 class SpiderAvito(object):
 
@@ -145,14 +145,16 @@ class SpiderAvitoList(SpiderAvito):
 
     def save_to_postgresql(self, item):
         username, password, host, port, dbname = self.db_setting.values()
-        db = postgresql.open('pq://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname)
-        ins = db.prepare('INSERT INTO ads(url, title, price, data, address, date_add) VALUES ($1, $2, $3, $4, $5, now())')  # запрос на вставку в базу
-        in_base_true = db.prepare("SELECT * FROM ads where url=$1")  # проверка есть ли это объявление в базе
-        if len(in_base_true(item['url'])) == 0:
-            ins(item['url'], item['title'], item['price'], item['data'], item['address'])
-            return True
-        else:
-            return False
+        ins = 'INSERT INTO ads(url, title, price, data, address, date_add) VALUES (%s, %s, %s, %s, %s, now())'  # запрос на вставку в базу
+        in_base_true = 'SELECT * FROM ads where url=%s'  # проверка есть ли это объявление в базе
+        result = False
+        with psycopg2.connect('postgresql://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname) as conn:
+            with conn.cursor() as curs:
+                curs.execute(in_base_true, (item['url'],))
+                if len(curs.fetchall()) == 0:
+                    curs.execute(ins, (item['url'], item['title'], item['price'], item['data'], item['address']))
+                    result = True
+        return result
 
 class SpiderAvitoDispatcher(object):
     def __init__(self, db_setting, user_agents=None, proxies=None, count_page=10, time_sleep=True):
@@ -176,13 +178,13 @@ class SpiderAvitoDispatcherList(SpiderAvitoDispatcher):
         self.url = url
 
     def next_page(self, *args):
-        print('Парсинг страницы:', self.url)
+        print(datetime.now(), ' Парсинг страницы:', self.url)
         yield self.url
         page = 1
         while True:
             page += 1
             result = self.url + '?p=' + str(page)
-            print('Парсинг страницы:', result)
+            print(datetime.now(), ' Парсинг страницы:', result)
             yield result
 
     def start(self):
@@ -468,7 +470,7 @@ class SpiderAvitoAds(SpiderAvito):
                 )
 
     def start(self):
-        print('Парсинг - ', self.url)
+        print(datetime.now(), ' Парсинг - ', self.url)
         try:
             html = self.getHtml()
         except urllib3.exceptions.HTTPError as err:
@@ -484,7 +486,7 @@ class SpiderAvitoAds(SpiderAvito):
         return (self.FullAddress, self.AuthorAds, self.Phone)
 
     async def start_aio(self):
-        print('Парсинг (async) - ', self.url)
+        print(datetime.now(), ' Парсинг (async) - ', self.url)
         try:
             html = await self.getHtml_aio()
         except urllib3.exceptions.HTTPError as err:
@@ -503,27 +505,29 @@ class SpiderAvitoAds(SpiderAvito):
 
     def save_to_postgresql(self):
         username, password, host, port, dbname = self.db_setting.values()
-        db = postgresql.open('pq://'+username+':'+password+'@'+host+':'+port+'/'+dbname)
-        querySave = db.prepare('update ads set "FullAddress"=$1, "CountRoom"=$2, "Floor"=$3, "CountFoor"=$4, "Material"=$5, "Area"=$6, "AreaKitchen"=$7, "AreaLife"=$8, "NumberAds"=$9, "Images"=$10, "TextAds"=$11, "AuthorAds"=$12, "isAgent"=$13, "Phone"=$14, "isLoad"=true, "Gps"=point($15, $16), date_add_site=$17 where url=$18')
-        querySave(self.FullAddress,
-                  int(self.CountRoom),
-                  self.Floor,
-                  self.CountFoor,
-                  self.Material,
-                  float(self.getOnlyNumber(self.Area)),
-                  float(self.getOnlyNumber(self.AreaKitchen)),
-                  float(self.getOnlyNumber(self.AreaLife)),
-                  self.NumberAds,
-                  ';'.join(self.Images),
-                  self.TextAds,
-                  self.AuthorAds,
-                  self.isAgent ,
-                  self.Phone,
-                  float(self.getOnlyNumber(self.GPS[0])),
-                  float(self.getOnlyNumber(self.GPS[1])),
-                  datetime.strptime(self.DateAdd,'%d.%m.%Y %H:%M'),
-                  self.url
-                  )
+        query = 'update ads set "FullAddress"=%s, "CountRoom"=%s, "Floor"=%s, "CountFoor"=%s, "Material"=%s, "Area"=%s, "AreaKitchen"=%s, "AreaLife"=%s, "NumberAds"=%s, "Images"=%s, "TextAds"=%s, "AuthorAds"=%s, "isAgent"=%s, "Phone"=%s, "isLoad"=true, "Gps"=point(%s, %s), date_add_site=%s where url=%s'
+        with psycopg2.connect('postgresql://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname) as conn:
+            with conn.cursor() as curs:
+                curs.execute(query,
+                             (self.FullAddress,
+                             int(self.CountRoom),
+                             self.Floor,
+                             self.CountFoor,
+                             self.Material,
+                             float(self.getOnlyNumber(self.Area)),
+                             float(self.getOnlyNumber(self.AreaKitchen)),
+                             float(self.getOnlyNumber(self.AreaLife)),
+                             self.NumberAds,
+                             ';'.join(self.Images),
+                             self.TextAds,
+                             self.AuthorAds,
+                             self.isAgent,
+                             self.Phone,
+                             float(self.getOnlyNumber(self.GPS[0])),
+                             float(self.getOnlyNumber(self.GPS[1])),
+                             datetime.strptime(self.DateAdd, '%d.%m.%Y %H:%M'),
+                             self.url)
+                             )
         return True
 
     async def save_to_postgresql_aio(self):
@@ -555,12 +559,12 @@ class SpiderAvitoAds(SpiderAvito):
         await conn.close()
         return True
 
-
     def deactive_to_postgresql(self):
         username, password, host, port, dbname = self.db_setting.values()
-        db = postgresql.open('pq://'+username+':'+password+'@'+host+':'+port+'/'+dbname)
-        querySave = db.prepare('update ads set "deactive"=true where url=$1')
-        querySave(self.url)
+        query = 'update ads set "deactive"=true where url=%s'  # проверка есть ли это объявление в базе
+        with psycopg2.connect('postgresql://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname) as conn:
+            with conn.cursor() as curs:
+                curs.execute(query, (self.url,))
         return True
 
     async def deactive_to_postgresql_aio(self):
@@ -575,12 +579,13 @@ class SpiderAvitoAds(SpiderAvito):
 class SpiderAvitoDispatcherAds(SpiderAvitoDispatcher):
     def getListUrl(self):
         username, password, host, port, dbname = self.db_setting.values()
-        db = postgresql.open('pq://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname)
-        query = db.prepare(
-            'select id, url from ads where "isLoad"<>true and deactive=false order by random() limit $1')  # проверка есть ли это объявление в базе
+        query = 'select id, url from ads where "isLoad"<>true and deactive=false order by random() limit %s'  # проверка есть ли это объявление в базе
         result = list()
-        for item in query(self.CountPage):
-            result.append(item['url'])
+        with psycopg2.connect('postgresql://' + username + ':' + password + '@' + host + ':' + port + '/' + dbname) as conn:
+            with conn.cursor() as curs:
+                curs.execute(query, (self.CountPage,))
+                for item in curs:
+                    result.append(item[1])
         return result
 
     def next_page(self, lst):
