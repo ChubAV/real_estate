@@ -37,13 +37,16 @@ def synchronously():
     result = 0
     try:
         while True:
+            result_item =0
             if count_while % 2 == 0:
                 x = SpiderAvitoDispatcherList(url=URL_KVARTIRY_LIST, db_setting=DB_SETTINGS, user_agents=USER_AGENTS)
-                result += x.start()
+                result_item += x.start()
             else:
                 x = SpiderAvitoDispatcherAds(db_setting=DB_SETTINGS, user_agents=USER_AGENTS)
-                result += x.start()
+                result_item += x.start()
             count_while += 1
+            result +=result_item
+            if result_item < 10: time.sleep(60)
     except KeyboardInterrupt:
         print('Пользователь прервал программу.')
     except Exception as err:
