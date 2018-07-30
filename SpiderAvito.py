@@ -268,7 +268,7 @@ class SpiderAvitoAds(SpiderAvito):
     #####################################################################################
     ##### Возвращает автора объявления
     def getAuhtorFromPage(self, soup):
-        return soup.find_all('div', class_='seller-info-prop')[0].a.text.strip()
+        return soup.find_all('div', class_='seller-info-prop')[0].find_all('div', class_='seller-info-name')[0].text.strip()
     #####################################################################################
     ##### Это агентство?
     def isAgentFromPage(self, soup):
